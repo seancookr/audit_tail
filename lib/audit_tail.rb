@@ -15,6 +15,7 @@ require "audit_tail/log"
 require "audit_tail/model_concern"
 require "audit_tail/controller_concern"
 require "audit_tail/backends/active_record"
+require "audit_tail/cloud_sync"
 
 # Main namespace for the AuditTail gem. Provides configuration, actor management,
 # custom event logging, and the query entry point.

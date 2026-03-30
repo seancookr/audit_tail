@@ -44,13 +44,15 @@ module AuditTail
     end
 
     def _audit_tail_write(action, changeset)
-      AuditTail::Event.create!(
-        actor: AuditTail::Actor.current,
+      actor = AuditTail::Actor.current
+      event = AuditTail::Event.create!(
+        actor: actor,
         action: action,
         subject: self,
         changeset: changeset,
         metadata: {}
       )
+      AuditTail::CloudSync.call(event, actor: actor, subject: self)
     end
 
     def _audit_tail_full_attributes

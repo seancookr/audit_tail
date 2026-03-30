@@ -2,6 +2,7 @@
 
 require "active_record"
 require "database_cleaner/active_record"
+require "webmock/rspec"
 require "audit_tail"
 require "audit_tail/test_helpers"
 
