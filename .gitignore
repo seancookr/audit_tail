@@ -1,0 +1,4 @@
+/.beads/
+*.gem
+.bundle/
+vendor/bundle/
