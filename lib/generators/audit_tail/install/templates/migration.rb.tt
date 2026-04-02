@@ -9,7 +9,7 @@ class CreateAuditEvents < ActiveRecord::Migration<%= migration_version %>
       t.text    :changeset,  default: "{}"
       t.text    :metadata,   default: "{}"
 
-      t.timestamps null: false, updated_at: false
+      t.datetime :created_at, null: false
     end
 
     add_index :audit_events, [:actor_type, :actor_id]
