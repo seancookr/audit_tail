@@ -52,7 +52,7 @@ module AuditTail
         changeset: changeset,
         metadata: {}
       )
-      AuditTail::CloudSync.call(event, actor: actor, subject: self)
+      AuditTail::CloudSync.dispatch(event, actor: actor, subject: self)
     end
 
     def _audit_tail_full_attributes

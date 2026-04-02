@@ -13,7 +13,7 @@ module AuditTail
         metadata: metadata,
         changeset: {}
       )
-      AuditTail::CloudSync.call(event, actor: resolved_actor, subject: subject)
+      AuditTail::CloudSync.dispatch(event, actor: resolved_actor, subject: subject)
     end
   end
 end

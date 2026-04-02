@@ -7,6 +7,22 @@ module AuditTail
   # Posts audit events to the AuditTail Cloud API.
   # Failures are silently rescued so cloud sync never breaks local writes.
   module CloudSync
+    # Routes the event to the configured adapter. Called from AR callbacks and Log.call.
+    def self.dispatch(event, actor: nil, subject: nil)
+      return unless AuditTail.configuration.cloud_sync_enabled?
+
+      case AuditTail.configuration.cloud_sync_adapter
+      when :active_job
+        AuditTail::CloudSyncJob.perform_later(event.id)
+      when :sidekiq
+        Sidekiq::Client.push("class" => "AuditTail::CloudSyncWorker", "args" => [event.id])
+      else
+        call(event, actor: actor, subject: subject)
+      end
+    rescue StandardError
+      # Dispatch failures must not affect local writes
+    end
+
     def self.call(event, actor: nil, subject: nil)
       return unless AuditTail.configuration.cloud_sync_enabled?
 

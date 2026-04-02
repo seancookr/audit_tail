@@ -3,11 +3,13 @@
 module AuditTail
   # Holds global configuration for the AuditTail gem.
   class Configuration
-    attr_accessor :backend, :ignored_attributes, :cloud_api_key, :cloud_sync_url, :cloud_environment
+    attr_accessor :backend, :ignored_attributes, :cloud_api_key, :cloud_sync_url, :cloud_environment,
+                  :cloud_sync_adapter
 
     def initialize
       @backend = :active_record
       @ignored_attributes = %w[created_at updated_at]
+      @cloud_sync_adapter = :inline
     end
 
     def cloud_sync_enabled?

@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 require "active_record"
+require "active_job"
 require "database_cleaner/active_record"
 require "webmock/rspec"
 require "audit_tail"
 require "audit_tail/test_helpers"
+
+ActiveJob::Base.queue_adapter = :test
 
 # In-memory SQLite database for tests
 ActiveRecord::Base.establish_connection(adapter: "sqlite3", database: ":memory:")

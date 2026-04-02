@@ -21,9 +21,10 @@ RSpec.describe AuditTail::CloudSync do
 
   after do
     AuditTail.configure do |c|
-      c.cloud_api_key  = nil
-      c.cloud_sync_url = nil
-      c.cloud_environment = nil
+      c.cloud_api_key       = nil
+      c.cloud_sync_url      = nil
+      c.cloud_environment   = nil
+      c.cloud_sync_adapter  = :inline
     end
   end
 
@@ -124,6 +125,86 @@ RSpec.describe AuditTail::CloudSync do
       AuditTail.actor = user
 
       expect { invoice.update!(status: "sent") }.not_to raise_error
+    end
+  end
+
+  describe "adapter routing" do
+    let(:user)    { User.create!(name: "Alice", email: "alice@example.com") }
+    let(:invoice) { Invoice.create!(title: "INV-1", amount: 100) }
+
+    before do
+      stub_events_endpoint
+      user
+      invoice
+      WebMock.reset!
+      stub_events_endpoint
+    end
+
+    context "when adapter is :active_job" do
+      before { AuditTail.configure { |c| c.cloud_sync_adapter = :active_job } }
+
+      let(:enqueued_jobs) { ActiveJob::Base.queue_adapter.enqueued_jobs }
+
+      it "enqueues CloudSyncJob instead of posting synchronously" do
+        AuditTail.actor = user
+        invoice.update!(status: "sent")
+
+        expect(enqueued_jobs.map { |j| j[:job] }).to include(AuditTail::CloudSyncJob)
+        expect(WebMock).not_to have_requested(:post, "#{sync_url}/api/v1/events")
+      end
+
+      it "enqueues the job with the event id" do
+        AuditTail.actor = user
+        invoice.update!(status: "sent")
+
+        event = AuditTail::Event.last
+        job = enqueued_jobs.find { |j| j[:job] == AuditTail::CloudSyncJob }
+        expect(job[:args]).to eq([event.id])
+      end
+    end
+
+    context "when adapter is :sidekiq" do
+      before { AuditTail.configure { |c| c.cloud_sync_adapter = :sidekiq } }
+
+      it "pushes to Sidekiq instead of posting synchronously" do
+        stub_const("Sidekiq::Client", Class.new)
+        allow(Sidekiq::Client).to receive(:push)
+
+        AuditTail.actor = user
+        invoice.update!(status: "sent")
+
+        event = AuditTail::Event.last
+        expect(Sidekiq::Client).to have_received(:push).with(
+          "class" => "AuditTail::CloudSyncWorker",
+          "args"  => [event.id]
+        )
+        expect(WebMock).not_to have_requested(:post, "#{sync_url}/api/v1/events")
+      end
+    end
+  end
+
+  describe "CloudSyncJob" do
+    let(:user)    { User.create!(name: "Alice", email: "alice@example.com") }
+    let(:invoice) { Invoice.create!(title: "INV-1", amount: 100) }
+
+    before { stub_events_endpoint }
+
+    it "posts the event when performed" do
+      AuditTail.actor = user
+      invoice.update!(status: "sent")
+      event = AuditTail::Event.last
+
+      WebMock.reset!
+      stub_events_endpoint
+
+      AuditTail::CloudSyncJob.new.perform(event.id)
+
+      expect(WebMock).to have_requested(:post, "#{sync_url}/api/v1/events")
+    end
+
+    it "does nothing for a missing event id" do
+      expect { AuditTail::CloudSyncJob.new.perform(999_999) }.not_to raise_error
+      expect(WebMock).not_to have_requested(:post, "#{sync_url}/api/v1/events")
     end
   end
 
