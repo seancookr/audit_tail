@@ -13,7 +13,7 @@ module AuditTail
 
       desc "Creates an AuditTail initializer and migration in your application."
 
-      def create_migration
+      def create_audit_events_migration
         migration_template "migration.rb.tt", "db/migrate/create_audit_events.rb",
                            { migration_version: migration_version }
       end
