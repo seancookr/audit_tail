@@ -15,9 +15,10 @@ Keeping an audit trail is essential for compliance, debugging, and user trust �
 - One-line opt-in per model (`audit_trail`)
 - Automatic `create`, `update`, and `destroy` event capture with before/after changesets
 - Polymorphic actor and subject — works with any model as the "who" and "what"
-- Thread-local actor propagation so controllers stay clean
+- Fiber-local actor propagation — safe for Puma, Falcon, and other fiber-based servers
 - `AuditTail.log()` for custom, hand-crafted events
 - Chainable query interface
+- Optional cloud sync to [AuditTail Cloud](https://audittail.dev) with async adapter support
 - RSpec test helpers included
 
 ---
@@ -206,8 +207,54 @@ AuditTail.configure do |config|
   # Attributes excluded from all changesets, regardless of model-level filters.
   # Defaults to %w[created_at updated_at].
   config.ignored_attributes = %w[created_at updated_at]
+
+  # Cloud sync (optional — see "Cloud Sync" section below).
+  # config.cloud_api_key      = ENV["AUDIT_TAIL_API_KEY"]
+  # config.cloud_sync_url     = "https://app.audittail.dev"
+  # config.cloud_environment  = Rails.env
+  # config.cloud_sync_adapter = :inline  # :inline | :active_job | :sidekiq
 end
 ```
+
+---
+
+## Cloud Sync
+
+AuditTail can mirror every event to [AuditTail Cloud](https://audittail.dev) for cross-app search, alerting, and long-term retention.
+
+### Setup
+
+Set your API key and sync URL in the initializer:
+
+```ruby
+AuditTail.configure do |config|
+  config.cloud_api_key     = ENV["AUDIT_TAIL_API_KEY"]
+  config.cloud_sync_url    = "https://app.audittail.dev"
+  config.cloud_environment = Rails.env   # optional — tags events by environment
+end
+```
+
+Cloud sync is disabled when either `cloud_api_key` or `cloud_sync_url` is blank. A missing or invalid key is never a hard error — sync failures are silently rescued so they never affect local writes.
+
+### Async adapters
+
+By default (`cloud_sync_adapter = :inline`) the HTTP POST happens synchronously on the request thread. For production apps this should be moved off-thread:
+
+#### ActiveJob
+
+```ruby
+config.cloud_sync_adapter = :active_job
+```
+
+Enqueues `AuditTail::CloudSyncJob` using whatever queue adapter your app has configured (Sidekiq, Solid Queue, etc.). The job re-fetches the event by ID and posts it.
+
+#### Sidekiq (without ActiveJob)
+
+```ruby
+config.cloud_sync_adapter = :sidekiq
+```
+
+Pushes directly to Sidekiq via `Sidekiq::Client` — no ActiveJob layer. Requires the `sidekiq` gem to be present and a running Sidekiq process. The worker class is `AuditTail::CloudSyncWorker`.
 
 ---
 
