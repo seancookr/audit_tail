@@ -15,7 +15,7 @@ module AuditTail
 
       def create_migration
         migration_template "migration.rb.tt", "db/migrate/create_audit_events.rb",
-                           migration_version: migration_version
+                           { migration_version: migration_version }
       end
 
       def create_initializer

@@ -176,7 +176,7 @@ RSpec.describe AuditTail::CloudSync do
         event = AuditTail::Event.last
         expect(Sidekiq::Client).to have_received(:push).with(
           "class" => "AuditTail::CloudSyncWorker",
-          "args"  => [event.id]
+          "args" => [event.id]
         )
         expect(WebMock).not_to have_requested(:post, "#{sync_url}/api/v1/events")
       end
