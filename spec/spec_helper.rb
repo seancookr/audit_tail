@@ -66,5 +66,6 @@ RSpec.configure do |config|
 
   config.after do
     AuditTail.clear_actor!
+    AuditTail::CloudSync.reset_buffer!
   end
 end

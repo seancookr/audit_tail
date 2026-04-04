@@ -16,4 +16,9 @@ AuditTail.configure do |config|
   # Adapter for cloud sync dispatch. Default: :inline (synchronous, on request thread).
   # Use :active_job or :sidekiq to move sync off the request thread in production.
   # config.cloud_sync_adapter = :inline  # :inline | :active_job | :sidekiq
+
+  # Batching — reduce HTTP calls by grouping events into a single POST.
+  # config.cloud_sync_batching       = true   # set false to revert to one-event-per-POST
+  # config.cloud_sync_batch_size     = 25     # flush after N events
+  # config.cloud_sync_flush_interval = 5      # flush after N seconds even if batch isn't full
 end

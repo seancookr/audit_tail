@@ -16,8 +16,11 @@ require "audit_tail/model_concern"
 require "audit_tail/controller_concern"
 require "audit_tail/backends/active_record"
 require "audit_tail/cloud_sync"
+require "audit_tail/cloud_sync/batch_buffer"
 require "audit_tail/cloud_sync_job"
+require "audit_tail/cloud_sync_batch_job"
 require "audit_tail/cloud_sync_worker"
+require "audit_tail/cloud_sync_batch_worker"
 
 # Main namespace for the AuditTail gem. Provides configuration, actor management,
 # custom event logging, and the query entry point.
@@ -59,4 +62,9 @@ end
 # Hook into ActiveRecord::Base when Rails is present
 ActiveSupport.on_load(:active_record) do
   include AuditTail::ModelConcern
+end
+
+at_exit do
+  AuditTail::CloudSync.shutdown! if AuditTail.configuration.cloud_sync_batching?
+rescue StandardError # rubocop:disable Lint/SuppressedException
 end

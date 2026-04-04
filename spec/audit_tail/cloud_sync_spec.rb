@@ -14,17 +14,19 @@ RSpec.describe AuditTail::CloudSync do
 
   before do
     AuditTail.configure do |c|
-      c.cloud_api_key  = api_key
-      c.cloud_sync_url = sync_url
+      c.cloud_api_key      = api_key
+      c.cloud_sync_url     = sync_url
+      c.cloud_sync_batching = false
     end
   end
 
   after do
     AuditTail.configure do |c|
-      c.cloud_api_key       = nil
-      c.cloud_sync_url      = nil
-      c.cloud_environment   = nil
-      c.cloud_sync_adapter  = :inline
+      c.cloud_api_key        = nil
+      c.cloud_sync_url       = nil
+      c.cloud_environment    = nil
+      c.cloud_sync_adapter   = :inline
+      c.cloud_sync_batching  = true
     end
   end
 
@@ -221,6 +223,54 @@ RSpec.describe AuditTail::CloudSync do
         expect(e["action"]).to eq("export.csv")
         expect(e["subject_type"]).to eq("User")
         expect(e["metadata"]).to eq("rows" => 42)
+        true
+      end)
+    end
+  end
+
+  describe "batching integration" do
+    let(:user)    { User.create!(name: "Alice", email: "alice@example.com") }
+    let(:invoice) { Invoice.create!(title: "INV-1", amount: 100) }
+
+    before do
+      AuditTail.configure do |c|
+        c.cloud_sync_batching     = true
+        c.cloud_sync_batch_size   = 50 # high threshold so we control flush manually
+        c.cloud_sync_flush_interval = 60
+      end
+      stub_events_endpoint
+      user
+      invoice
+      described_class.reset_buffer!
+      WebMock.reset!
+      stub_events_endpoint
+    end
+
+    it "buffers events and sends them in a single POST on flush" do
+      AuditTail.actor = user
+      invoice.update!(status: "sent")
+      invoice.update!(status: "paid")
+
+      expect(WebMock).not_to have_requested(:post, "#{sync_url}/api/v1/events")
+
+      described_class.flush!
+
+      expect(WebMock).to(have_requested(:post, "#{sync_url}/api/v1/events").once.with do |req|
+        body = JSON.parse(req.body)
+        expect(body["events"].size).to eq(2)
+        expect(body["events"].map { |e| e["action"] }).to all(eq("update"))
+        true
+      end)
+    end
+
+    it "captures actor_display at dispatch time" do
+      AuditTail.actor = user
+      invoice.update!(status: "sent")
+      described_class.flush!
+
+      expect(WebMock).to(have_requested(:post, "#{sync_url}/api/v1/events").with do |req|
+        body = JSON.parse(req.body)
+        expect(body["events"].first["actor_display"]).to be_present
         true
       end)
     end

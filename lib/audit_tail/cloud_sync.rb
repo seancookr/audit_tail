@@ -11,13 +11,18 @@ module AuditTail
     def self.dispatch(event, actor: nil, subject: nil)
       return unless AuditTail.configuration.cloud_sync_enabled?
 
-      case AuditTail.configuration.cloud_sync_adapter
-      when :active_job
-        AuditTail::CloudSyncJob.perform_later(event.id)
-      when :sidekiq
-        Sidekiq::Client.push("class" => "AuditTail::CloudSyncWorker", "args" => [event.id])
+      if AuditTail.configuration.cloud_sync_batching?
+        payload = build_payload(event, actor: actor, subject: subject)
+        buffer.push(payload)
       else
-        call(event, actor: actor, subject: subject)
+        case AuditTail.configuration.cloud_sync_adapter
+        when :active_job
+          AuditTail::CloudSyncJob.perform_later(event.id)
+        when :sidekiq
+          Sidekiq::Client.push("class" => "AuditTail::CloudSyncWorker", "args" => [event.id])
+        else
+          call(event, actor: actor, subject: subject)
+        end
       end
     rescue StandardError
       # Dispatch failures must not affect local writes
@@ -30,6 +35,34 @@ module AuditTail
       post(payload)
     rescue StandardError
       # Cloud sync failures must not affect local writes
+    end
+
+    # Send an array of pre-built payloads in a single HTTP POST.
+    def self.post_batch(payloads)
+      uri = URI("#{AuditTail.configuration.cloud_sync_url}/api/v1/events")
+      http = build_http(uri)
+      request = Net::HTTP::Post.new(uri)
+      request["Content-Type"] = "application/json"
+      request["Authorization"] = "Bearer #{AuditTail.configuration.cloud_api_key}"
+      request.body = JSON.generate({ events: payloads })
+      http.request(request)
+    end
+
+    def self.buffer
+      @buffer ||= CloudSync::BatchBuffer.new
+    end
+
+    def self.flush!
+      buffer.flush
+    end
+
+    def self.shutdown!
+      buffer.shutdown!
+    end
+
+    def self.reset_buffer!
+      @buffer&.reset!
+      @buffer = nil
     end
 
     def self.build_payload(event, actor:, subject:) # rubocop:disable Metrics/AbcSize
@@ -49,7 +82,6 @@ module AuditTail
       payload[:environment] = config.cloud_environment if config.cloud_environment
       payload
     end
-    private_class_method :build_payload
 
     def self.post(payload)
       uri = URI("#{AuditTail.configuration.cloud_sync_url}/api/v1/events")
