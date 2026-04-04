@@ -14,7 +14,7 @@ module AuditTail
         include AuditTail::ModelCallbacks
       end
 
-      alias_method :audit_trail, :audit_tail
+      alias_method :audit_tail, :audit_trail
     end
   end
 
