@@ -106,7 +106,7 @@ All fields are tracked except the ones listed.
 
 ### Actor setup
 
-AuditTail tracks the actor (the "who") via a thread-local variable. The recommended approach is to include `AuditTail::ControllerConcern` in `ApplicationController`:
+AuditTail tracks the actor (the "who") via a fiber-local variable (`Fiber[:audit_tail_actor]`). This is safe for both thread-based servers (Puma) and fiber-based servers (Falcon). The recommended approach is to include `AuditTail::ControllerConcern` in `ApplicationController`:
 
 ```ruby
 class ApplicationController < ActionController::Base
@@ -213,6 +213,12 @@ AuditTail.configure do |config|
   # config.cloud_sync_url     = "https://app.audittail.dev"
   # config.cloud_environment  = Rails.env
   # config.cloud_sync_adapter = :inline  # :inline | :active_job | :sidekiq
+
+  # Batching — group events into a single HTTP POST to reduce API calls.
+  # Enabled by default when cloud sync is active.
+  # config.cloud_sync_batching       = true   # set false to revert to one-event-per-POST
+  # config.cloud_sync_batch_size     = 25     # flush after N events
+  # config.cloud_sync_flush_interval = 5      # flush after N seconds even if batch isn't full
 end
 ```
 
@@ -255,6 +261,23 @@ config.cloud_sync_adapter = :sidekiq
 ```
 
 Pushes directly to Sidekiq via `Sidekiq::Client` — no ActiveJob layer. Requires the `sidekiq` gem to be present and a running Sidekiq process. The worker class is `AuditTail::CloudSyncWorker`.
+
+### Batching
+
+Batching is enabled by default when cloud sync is active. Instead of one HTTP POST per event, payloads are collected in a thread-safe in-memory buffer and flushed as a single batch.
+
+The buffer flushes when any of these conditions is met:
+- **Size threshold**: `cloud_sync_batch_size` events accumulated (default: 25)
+- **Time interval**: `cloud_sync_flush_interval` seconds elapsed (default: 5s)
+- **Process shutdown**: an `at_exit` hook drains remaining events
+
+```ruby
+config.cloud_sync_batching       = true   # default — batch events
+config.cloud_sync_batch_size     = 25     # events per flush
+config.cloud_sync_flush_interval = 5      # seconds between flushes
+```
+
+Set `cloud_sync_batching = false` to fall back to one-event-per-POST (routed via the configured adapter).
 
 ---
 
