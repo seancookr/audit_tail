@@ -226,7 +226,7 @@ end
 
 ## Cloud Sync
 
-AuditTail can mirror every event to [AuditTail Cloud](https://audittail.dev) for cross-app search, alerting, and long-term retention.
+Coming Soon: AuditTail can mirror every event to [AuditTail Cloud](#) for cross-app search, alerting, and long-term retention.
 
 ### Setup
 
